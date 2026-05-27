@@ -1,0 +1,33 @@
+node_modules
+.DS_Store
+dist
+*-dist.zip
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+.svn
+
+# local env files
+.env.local
+.env.*.local
+.eslintcache
+
+logs
+*.log
+
+# Editor directories and files
+.idea
+# .vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI
+.agent
+.agents
+.claude
+.codex
+skills-lock.json
+.npmrc
