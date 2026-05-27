@@ -4,6 +4,8 @@
   "description": "A Vue 3 joystick component",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://github.com/abcd0f/vue-joystick",
+  "bugs": "https://github.com/abcd0f/vue-joystick/issues",
   "files": [
     "dist"
   ],
