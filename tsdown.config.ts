@@ -20,6 +20,8 @@ export default defineConfig({
 
   plugins: [vue()],
 
+  minify: true,
+
   deps: {
     neverBundle: ['vue']
   }
