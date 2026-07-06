@@ -1,3 +1,5 @@
+import type { MaybeRefOrGetter } from 'vue';
+
 export interface JoystickPosition {
   x: number;
   y: number;
@@ -7,14 +9,14 @@ export interface JoystickPosition {
 export type Direction = 'up' | 'down' | 'left' | 'right' | 'upLeft' | 'upRight' | 'downLeft' | 'downRight' | 'center';
 
 export interface JoystickOptions {
-  maxRadius?: number;
-  deadZone?: number;
-  damping?: number;
-  returnToCenter?: boolean;
-  changeThrottle?: number;
-  mode?: 'free' | 'yAxis' | 'xAxis';
-  disableKeyboard?: boolean;
-  disabled?: boolean;
+  maxRadius?: MaybeRefOrGetter<number>;
+  deadZone?: MaybeRefOrGetter<number>;
+  damping?: MaybeRefOrGetter<number>;
+  returnToCenter?: MaybeRefOrGetter<boolean>;
+  changeThrottle?: MaybeRefOrGetter<number>;
+  mode?: MaybeRefOrGetter<'free' | 'yAxis' | 'xAxis'>;
+  disableKeyboard?: MaybeRefOrGetter<boolean>;
+  disabled?: MaybeRefOrGetter<boolean>;
   onChange?: (pos: JoystickPosition) => void;
   onStart?: () => void;
   onEnd?: () => void;

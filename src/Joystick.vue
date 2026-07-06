@@ -10,6 +10,9 @@
         @keyup="handlers.onKeyUp"
       >
         <div class="joystick-around">
+          <div class="base-slot">
+            <slot name="base" />
+          </div>
           <div class="handle">
             <div
               ref="knobRef"
@@ -17,9 +20,11 @@
               :class="{ dragging: isDragging }"
               @pointerdown="handlers.onPointerDown"
             >
-              <div class="inside">
-                <span v-for="i in 4" :key="i" class="dot" />
-              </div>
+              <slot name="knob">
+                <div class="inside">
+                  <span v-for="i in 4" :key="i" class="dot" />
+                </div>
+              </slot>
             </div>
           </div>
         </div>
@@ -57,7 +62,7 @@ const emit = defineEmits<{
   reachBoundary: [];
 }>();
 
-// 从单个主色推导整套色调，用 color-mix(in oklch) 保证感知均匀
+// 从单个主色推导整套色调（线性 RGB 空间混合，派生高光 / 阴影 / 轮廓色）
 const cssVars = computed(() => {
   const p = deriveJoystickPalette(props.color);
   return {
@@ -83,13 +88,13 @@ const {
   handlers,
   reset
 } = useJoystick({
-  maxRadius: props.maxRadius,
-  damping: props.damping,
-  returnToCenter: props.returnToCenter,
-  changeThrottle: props.changeThrottle,
-  mode: props.mode,
-  disableKeyboard: props.disableKeyboard,
-  disabled: props.disabled,
+  maxRadius: () => props.maxRadius,
+  damping: () => props.damping,
+  returnToCenter: () => props.returnToCenter,
+  changeThrottle: () => props.changeThrottle,
+  mode: () => props.mode,
+  disableKeyboard: () => props.disableKeyboard,
+  disabled: () => props.disabled,
   onChange: pos => emit('change', pos),
   onStart: () => emit('start'),
   onEnd: () => emit('end'),
@@ -152,13 +157,14 @@ defineExpose({
   background: conic-gradient(from 0deg, var(--j-dark), var(--j-light), var(--j-dark), var(--j-light), var(--j-dark));
 }
 
-.joystick-base-layer {
+/* #base 插槽容器：铺满底座、位于 handle 之下、不拦截指针 */
+.base-slot {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  overflow: hidden;
   pointer-events: none;
   z-index: 0;
+  overflow: hidden;
 }
 
 .handle {
@@ -200,6 +206,7 @@ defineExpose({
     transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
     filter 0.2s ease;
   cursor: grab;
+  overflow: hidden;
 }
 
 .button-wrapper.dragging {

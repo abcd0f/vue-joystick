@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, type Ref } from 'vue';
+import { ref, onMounted, onUnmounted, toValue, type Ref } from 'vue';
 import type { JoystickOptions, JoystickPosition, Direction } from './types';
 
 const DIRECTION_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'] as const;
@@ -24,14 +24,6 @@ function angleToDirection(angleDeg: number): Direction {
 
 export function useJoystick(options: JoystickOptions = {}) {
   const {
-    maxRadius = 32,
-    deadZone = 3,
-    damping = 0.18,
-    returnToCenter = true,
-    changeThrottle = 0,
-    mode = 'free',
-    disableKeyboard = false,
-    disabled = false,
     onChange,
     onStart,
     onEnd,
@@ -41,7 +33,15 @@ export function useJoystick(options: JoystickOptions = {}) {
     onReachBoundary
   } = options;
 
-  const clampedDamping = Math.max(0, Math.min(1, damping));
+  // 选项以 getter 形式读取：传入 ref / getter 时响应式生效，传原始值则等价于快照（向后兼容）
+  const getMaxRadius = () => toValue(options.maxRadius) ?? 32;
+  const getDeadZone = () => toValue(options.deadZone) ?? 3;
+  const getDamping = () => Math.max(0, Math.min(1, toValue(options.damping) ?? 0.18));
+  const getReturnToCenter = () => toValue(options.returnToCenter) ?? true;
+  const getChangeThrottle = () => toValue(options.changeThrottle) ?? 0;
+  const getMode = () => toValue(options.mode) ?? 'free';
+  const getDisableKeyboard = () => toValue(options.disableKeyboard) ?? false;
+  const getDisabled = () => toValue(options.disabled) ?? false;
 
   const containerRef = ref<HTMLElement | null>(null);
   const knobRef = ref<HTMLElement | null>(null);
@@ -72,12 +72,17 @@ export function useJoystick(options: JoystickOptions = {}) {
   let prevDirection: Direction = 'center';
   let prevInDeadZone = true; // 初始在死区（中心）
   let prevAtBoundary = false;
+  // 最近一次 onChange 派发的归一化坐标，用于变化检测（与对外 ref 分离，避免误判）
+  let lastEmittedX = 0;
+  let lastEmittedY = 0;
 
   // ─────────────────────────────────────
   // render
   // ─────────────────────────────────────
 
   function emitChange(nx: number, ny: number, dist: number) {
+    lastEmittedX = nx;
+    lastEmittedY = ny;
     onChange?.({ x: nx, y: ny, distance: dist });
   }
 
@@ -85,8 +90,13 @@ export function useJoystick(options: JoystickOptions = {}) {
     const el = knobRef.value;
     if (!el) return;
 
-    currentX += (targetX - currentX) * clampedDamping;
-    currentY += (targetY - currentY) * clampedDamping;
+    const maxRadius = getMaxRadius();
+    const deadZone = getDeadZone();
+    const damping = getDamping();
+    const changeThrottle = getChangeThrottle();
+
+    currentX += (targetX - currentX) * damping;
+    currentY += (targetY - currentY) * damping;
 
     const tiltX = -(currentY / maxRadius) * TILT_SCALE;
     const tiltY = (currentX / maxRadius) * TILT_SCALE;
@@ -136,23 +146,23 @@ export function useJoystick(options: JoystickOptions = {}) {
       prevDirection = nextDirection;
     }
 
-    // ── onChange 节流/直接触发 ──
-    if (changeThrottle > 0) {
-      const now = performance.now();
-      if (now - lastChangeTime >= changeThrottle) {
-        lastChangeTime = now;
-        emitChange(nx, ny, dist);
-      }
-    } else {
-      if (nx !== normalizedX.value || ny !== normalizedY.value) {
+    // ── onChange 派发：对比最近一次派发值，节流模式下仅在有变化时触发，避免静止时重复派发 ──
+    if (nx !== lastEmittedX || ny !== lastEmittedY) {
+      if (changeThrottle > 0) {
+        const now = performance.now();
+        if (now - lastChangeTime >= changeThrottle) {
+          lastChangeTime = now;
+          emitChange(nx, ny, dist);
+        }
+      } else {
         emitChange(nx, ny, dist);
       }
     }
 
-    // ── RAF 循环控制 ──
+    // ── RAF 循环控制：仍在运动 / 键盘激活 / 节流模式下尚有未派发的变化时继续 ──
     const isMoving = Math.abs(targetX - currentX) > SNAP_THRESHOLD || Math.abs(targetY - currentY) > SNAP_THRESHOLD;
-    const hasOffset = Math.hypot(currentX, currentY) > SNAP_THRESHOLD;
-    const shouldContinue = isMoving || isKeyboardActive || (changeThrottle > 0 && hasOffset);
+    const hasUnemitted = nx !== lastEmittedX || ny !== lastEmittedY;
+    const shouldContinue = isMoving || isKeyboardActive || (changeThrottle > 0 && hasUnemitted);
 
     if (shouldContinue) {
       rafId = requestAnimationFrame(render);
@@ -172,6 +182,10 @@ export function useJoystick(options: JoystickOptions = {}) {
   // ─────────────────────────────────────
 
   function clampToRadius(x: number, y: number) {
+    const maxRadius = getMaxRadius();
+    const deadZone = getDeadZone();
+    const mode = getMode();
+
     const dist = Math.hypot(x, y);
     if (dist < deadZone) return { x: 0, y: 0 };
 
@@ -200,7 +214,7 @@ export function useJoystick(options: JoystickOptions = {}) {
   // ─────────────────────────────────────
 
   function onPointerDown(e: PointerEvent) {
-    if (disabled) return;
+    if (getDisabled()) return;
     e.preventDefault();
 
     const rect = containerRef.value!.getBoundingClientRect();
@@ -230,7 +244,7 @@ export function useJoystick(options: JoystickOptions = {}) {
 
     isDragging.value = false;
 
-    if (returnToCenter) {
+    if (getReturnToCenter()) {
       updateTarget(0, 0);
     }
 
@@ -242,6 +256,9 @@ export function useJoystick(options: JoystickOptions = {}) {
   // ─────────────────────────────────────
 
   function calcKeyboardTarget(): { x: number; y: number } {
+    const maxRadius = getMaxRadius();
+    const mode = getMode();
+
     let x = 0;
     let y = 0;
 
@@ -266,7 +283,7 @@ export function useJoystick(options: JoystickOptions = {}) {
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    if (disabled || disableKeyboard || !isDirectionKey(e.key)) return;
+    if (getDisabled() || getDisableKeyboard() || !isDirectionKey(e.key)) return;
     e.preventDefault();
 
     pressedKeys.add(e.key);
@@ -277,7 +294,7 @@ export function useJoystick(options: JoystickOptions = {}) {
   }
 
   function onKeyUp(e: KeyboardEvent) {
-    if (disabled || disableKeyboard || !isDirectionKey(e.key)) return;
+    if (getDisabled() || getDisableKeyboard() || !isDirectionKey(e.key)) return;
     e.preventDefault();
 
     pressedKeys.delete(e.key);
